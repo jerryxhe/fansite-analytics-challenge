@@ -1,1 +1,10 @@
-Output for Feature 3 would go here
+/shuttle/missions/sts-71/movies/sts-71-launch.mpg HTTP/1.0
+/ HTTP/1.0
+/shuttle/missions/sts-71/movies/sts-71-tcdt-crew-walkout.mpg HTTP/1.0
+/shuttle/missions/sts-53/movies/sts-53-launch.mpg HTTP/1.0
+/shuttle/countdown/count70.gif HTTP/1.0
+/shuttle/technology/sts-newsref/stsref-toc.html HTTP/1.0
+/shuttle/countdown/video/livevideo2.gif HTTP/1.0
+/shuttle/countdown/count.gif HTTP/1.0
+/shuttle/missions/sts-71/movies/sts-71-hatch-hand-group.mpg
+/shuttle/countdown/video/livevideo.gif HTTP/1.0

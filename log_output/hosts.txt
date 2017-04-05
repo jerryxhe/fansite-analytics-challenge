@@ -1,1 +1,10 @@
-Output for Feature 1 would go here
+fsd.com,41
+129.63.186.5,41
+128.158.49.54,41
+apt.com,41
+tpafl-5.gate.net,41
+cs3p6.ipswichcity.qld.gov.au,41
+utsmc-2.swmed.edu,41
+taipei.jpl.nasa.gov,41
+192.189.46.188,41
+grant.jhuapl.edu,41
