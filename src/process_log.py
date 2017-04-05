@@ -110,8 +110,6 @@ class server_stats:
                                    for origin,v in heapq.nlargest(10, self.main_origin_table.iteritems(), 
                                    key=lambda x: x[-1])))
 
-import re
-ip_regex = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
 
 hist = server_stats()
 
@@ -175,7 +173,9 @@ class ExpiringCounter:
 time2str = lambda dt: datetime.strftime(dt,"%d/%b/%Y:%H:%M:%S %z")
 
 import re
+#ip_regex_whost_check = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
 ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]+?\s(?P<res>.*?)\".*?\s(?P<bytes>\d+)?$')
+
 from itertools import islice
 hist = server_stats()
 with open(commandline_args[1], 'r', encoding="latin-1") as f:
@@ -186,7 +186,7 @@ with open(commandline_args[1], 'r', encoding="latin-1") as f:
             origin_id = origin_dict['ipaddr']
             hist.incr(origin_id)
             if origin_dict['bytes']:
-                hist.add_resource_consumption(origin_dict['res'], int(origin_dict['bytes']))
+                hist.add_resource_consumption(origin_dict['res'].split(" ")[0], int(origin_dict['bytes']))
             hist.add_time_info_from_string(origin_dict['time_stamp'])
         else:
             print('Malformed line -->', line)
