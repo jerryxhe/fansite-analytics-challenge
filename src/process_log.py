@@ -194,13 +194,13 @@ with open(commandline_args[1], 'r', encoding="latin-1") as f:
     with open(commandline_args[2], 'w') as hosts_file:
         hosts_file.write(str(hist))
         
-    with open(commandline_args[3], 'w') as res_file:
+    with open(commandline_args[4], 'w') as res_file:
         for origin,_ in hist.top10_res():
             res_file.write(origin)
             res_file.write("\n")
             
     sc = StreamingCount(hist.temporal_stats)
-    with open(commandline_args[4], 'w') as hour_file:
+    with open(commandline_args[3], 'w') as hour_file:
         for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(hist.temporal_stats, hist.temporal_stats.irange(min(hist.temporal_stats)+timedelta(seconds=1)))], key=lambda x:x[0]):
             hour_file.write(time2str(ti)+","+str(v)+"\n")
 
