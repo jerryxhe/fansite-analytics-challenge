@@ -1,7 +1,6 @@
 #/usr/bin/env python3
 
 # This code tries to maintain compatibility with python2
-
 from itertools import islice
 import re
 # have separate sets for origins with small frequency
@@ -59,7 +58,7 @@ def parse_timestring(ts):
 
 
 class server_stats:
-    number_of_low_freq_hash = 20 # a reasonable value for this parameter
+    number_of_low_freq_hash = 5 # a reasonable value for this parameter
     def __init__(self):
         self.seen_k_th = [set() for _ in xrange(server_stats.number_of_low_freq_hash)]
         self.main_origin_table = {}
@@ -102,14 +101,20 @@ class server_stats:
     def __str__(self):
         from itertools import chain,islice
         k = server_stats.number_of_low_freq_hash
+        top10 = [] # accessible from this scope
         if is_python3:
-            return "".join(chain.from_iterable([origin,",",str(v),"\n"]
+            top10 = [[origin,",",str(v),"\n"]
                                    for origin,v in heapq.nlargest(10, self.main_origin_table.items(), 
-                                   key=lambda x: x[-1])))
-        return "".join(chain.from_iterable([origin,",",str(v),"\n"]
+                                   key=lambda x: x[-1])]
+        else:
+            top10 = [[origin,",",str(v),"\n"]
                                    for origin,v in heapq.nlargest(10, self.main_origin_table.iteritems(), 
-                                   key=lambda x: x[-1])))
-
+                                   key=lambda x: x[-1])]
+        top_freq = server_stats.number_of_low_freq_hash
+        while len(top10)<10 and top_freq>=1:
+            top10 += [[origin,",",str(top_freq),"\n"] for origin in self.seen_k_th[top_freq-1]]
+            top_freq-=1
+        return "".join(chain.from_iterable(islice(top10, 10)))
 
 hist = server_stats()
 
@@ -117,9 +122,8 @@ hist = server_stats()
 from datetime import timedelta
 from collections import deque
 import itertools
-import operator
 
-def compute_1hr_freq(ordered_dict, start_time):
+def compute_1hr_count(ordered_dict, start_time):
     if is_python3:
         return deque(itertools.accumulate(ordered_dict[k] for k in ordered_dict.irange(start_time, start_time+timedelta(hours=1))), maxlen=1)[0]
     freq = 0;
@@ -127,26 +131,30 @@ def compute_1hr_freq(ordered_dict, start_time):
         freq+=ordered_dict[k]
     return freq
 
-def compute_1hr_freq(ordered_dict, start_time):
-    if is_python3:
-        return deque(itertools.accumulate(ordered_dict[k] for k in ordered_dict.irange(start_time, start_time+timedelta(hours=1))), maxlen=1)[0]
-    freq = 0;
-    for k in ordered_dict.irange(start_time, start_time+timedelta(hours=1)):
-        freq+=ordered_dict[k]
-    return freq
-
-class StreamingCount:
+class SlidingWindowCount:
     def __init__(self, temporal_stats, time_frame = timedelta(hours=1)):
         self.temporal_stats = temporal_stats
-        self.old_sum = compute_1hr_freq(hist.temporal_stats, min(hist.temporal_stats))
+        self.old_sum = compute_1hr_count(hist.temporal_stats, min(hist.temporal_stats))
         self.time_frame = time_frame
-
+        self.start_time = min(hist.temporal_stats)
+        
+    def __iter__(self):
+        ordered_dict = self.temporal_stats
+        while self.start_time < max(ordered_dict):
+            yield (self.start_time, self.old_sum)
+            self.old_sum=sum([self.old_sum]+list(deque(itertools.accumulate(-ordered_dict[k] for k in ordered_dict.irange(self.start_time,self.start_time)),maxlen=1))
+        + list(deque(itertools.accumulate(ordered_dict[k] for k in ordered_dict.irange(self.start_time+self.time_frame,self.start_time+self.time_frame)),maxlen=1)))
+            self.start_time += timedelta(seconds=1)
+    
     def rollover_one(self, old_start_time, new_start_time):
         old_sum = self.old_sum
         time_frame = self.time_frame
         ordered_dict = self.temporal_stats
+        print(old_start_time,ordered_dict[old_start_time],new_start_time,ordered_dict[new_start_time])
+        if old_start_time == new_start_time or old_start_time == min(ordered_dict):
+            return old_sum
         if is_python3:
-            self.old_sum = sum([old_sum-ordered_dict[old_start_time]]
+            self.old_sum = sum([self.old_sum-ordered_dict[old_start_time]]
                        +list(deque(itertools.accumulate(ordered_dict[k] for k in ordered_dict.irange(old_start_time+time_frame, new_start_time+time_frame)), maxlen=1)))
             return self.old_sum
         old_sum -= ordered_dict[old_start_time]
@@ -156,7 +164,7 @@ class StreamingCount:
         return old_sum
 
 from itertools import repeat, starmap
-class ExpiringCounter:
+class ThreeStrikeCounter:
     def __init__(self, logwriter, time_frame=timedelta(minutes=3)):
         self.storage = defauldict(lambda: deque(maxlen=3))
         self.time_frame=time_frame
@@ -178,7 +186,12 @@ ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]
 
 from itertools import islice
 hist = server_stats()
-with open(commandline_args[1], 'r', encoding="latin-1") as f:
+
+kwargs = {}
+if is_python3:
+    kwargs['encoding']="latin-1"
+
+with open(commandline_args[1], 'r', **kwargs) as f:
     for line in f:
         mat = ip_regex.match(line)
         if mat:
@@ -199,13 +212,14 @@ with open(commandline_args[1], 'r', encoding="latin-1") as f:
             res_file.write(origin)
             res_file.write("\n")
             
-    sc = StreamingCount(hist.temporal_stats)
+    sc = SlidingWindowCount(hist.temporal_stats)
+    from itertools import chain
     with open(commandline_args[3], 'w') as hour_file:
-        for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(hist.temporal_stats, hist.temporal_stats.irange(min(hist.temporal_stats)+timedelta(seconds=1)))], key=lambda x:x[0]):
-            hour_file.write(time2str(ti)+","+str(v)+"\n")
-
+        #hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(chain([min(hist.temporal_stats)], hist.temporal_stats), hist.temporal_stats)], key=lambda x:x[0])]))
+        hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in heapq.nlargest(10, sc, key=lambda x:x[1])]))
     with open(commandline_args[5], 'w') as blocked_file:
         pass
+
 
 # EXTRA FEATURES
 # which origin gave the most error messages table sorted by error code
