@@ -60,7 +60,8 @@ class FastCounter: # separate storage for low frequency keys
         c = Counter(self.seen_k_th)
         for it,_ in top10:
             del c[it]
-        yield from c.most_common(top_n)
+        for tup in c.most_common(top_n):  # python 3 can do yield from c.most_common(top_n)
+            yield tup
         
     def incr(self,it, step_=1):
         if it in self.main_origin_table:
@@ -80,7 +81,8 @@ class server_stats:
     def __init__(self):
         self.seen_k_th = [set() for _ in xrange(server_stats.number_of_low_freq_hash)]
         self.main_origin_table = {}
-        self.res_consumption = FastCounter()
+        #self.res_consumption = FastCounter()
+        self.res_consumption = defaultdict(int)
         self.temporal_stats = SortedDict()
     
     def add_time_info_from_string(self, st):
@@ -91,11 +93,21 @@ class server_stats:
             self.temporal_stats[dt]=1
         #self.temporal_stats
     
-    def add_resource_consumption(self, it, int_val):
-        self.res_consumption.incr(it,int_val)
+    #def add_resource_consumption(self, it, int_val):
+    #    self.res_consumption.incr(it,int_val)
     
     def top10_res(self):
-        return islice(self.res_consumption, 10)
+        if is_python3:
+            return heapq.nlargest(10, self.res_consumption.items(), 
+                                   key=lambda x: x[-1])
+        return heapq.nlargest(10, self.res_consumption.iteritems(), 
+                                   key=lambda x: x[-1])
+                                   
+    def add_resource_consumption(self, it, int_val):
+        self.res_consumption[it]+=int_val
+    
+    #def top10_res(self):
+    #    return islice(self.res_consumption, 10)
     
     def incr(self,it):
         if it in self.main_origin_table:
@@ -188,7 +200,7 @@ time2str = lambda dt: datetime.strftime(dt,"%d/%b/%Y:%H:%M:%S %z")
 
 import re
 #ip_regex_whost_check = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
-ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]+?\s(?P<res>.*?)\s.*?\"\s(?P<code>\d{3})\s(?P<bytes>\d+)?$')
+ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]+?\s(?P<res>/.*?)\s.*?\"\s(?P<code>\d{3})\s(?P<bytes>\d+)?$')
 
 from itertools import islice
 hist = server_stats()
