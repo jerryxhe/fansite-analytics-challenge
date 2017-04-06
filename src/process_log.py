@@ -37,6 +37,7 @@ def parse_timestring(ts):
     return dt.replace(tzinfo=FixedOffSet(offset))
 
 from sortedcontainers import *
+from itertools import repeat
 from collections import Counter
 class FastCounter: # separate storage for low frequency keys
     def __init__(self, number_of_low_freq_hash=0, top_n=10):
@@ -159,23 +160,22 @@ class SlidingWindowCount:
             self.start_time += timedelta(seconds=1)
 
 
-from itertools import repeat, starmap
 class ThreeStrikeCounter:
-    def __init__(self, logwriter, time_frame=timedelta(seconds=20)):
-        self.storage = defauldict(lambda: deque(maxlen=3))  # ring buffer data structure
+    def __init__(self, time_frame=timedelta(seconds=20)):
+        self.storage = defaultdict(lambda: deque(maxlen=3))  # ring buffer data structure
         self.time_frame=time_frame
         self.banned_starts = []
 
     def add(self, ipaddr, new_time, end_point):
-        
-        bts = [t for (id_, t) in self.banned_starts if id_==ipaddr]
-        if len(bts)>0:
-            if (max(bts)+timedelta(minutes=5))>new_time:
-                return True
-        
+        for (id_, t) in reversed(self.banned_starts):
+            if id_==ipaddr:
+                if (t+timedelta(minutes=5))>new_time:
+                    return True
+            if t < (new_time -timedelta(minutes=5)):
+                break
         if end_point.startswith('/login'):
             err401_times = self.storage[ipaddr]
-            err401_times.push(new_time)
+            err401_times.append(new_time)
             min_start_time = new_time-self.time_frame
             if (err401_times[0] > min_start_time) and len(err401_times)==3:
                 self.banned_starts.append((ipaddr, new_time))
@@ -188,7 +188,7 @@ time2str = lambda dt: datetime.strftime(dt,"%d/%b/%Y:%H:%M:%S %z")
 
 import re
 #ip_regex_whost_check = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
-ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]+?\s(?P<res>.*?)\s.*?\".*?\s(?P<bytes>\d+)?$')
+ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s\"[A-Z]+?\s(?P<res>.*?)\s.*?\"\s(?P<code>\d{3})\s(?P<bytes>\d+)?$')
 
 from itertools import islice
 hist = server_stats()
@@ -197,6 +197,8 @@ kwargs = {}
 if is_python3:
     kwargs['encoding']="latin-1"
 
+blocked_file = open(commandline_args[5], 'w')
+tsc = ThreeStrikeCounter()
 with open(commandline_args[1], 'r', **kwargs) as f:
     for line in f:
         mat = ip_regex.match(line)
@@ -205,8 +207,15 @@ with open(commandline_args[1], 'r', **kwargs) as f:
             origin_id = origin_dict['ipaddr']
             hist.incr(origin_id)
             if origin_dict['bytes']:
-                hist.add_resource_consumption(origin_dict['res'].split(" ")[0], int(origin_dict['bytes']))
+                hist.add_resource_consumption(origin_dict['res'], int(origin_dict['bytes']))
             hist.add_time_info_from_string(origin_dict['time_stamp'])
+            res = origin_dict['res']
+            if res.startswith('/login'):
+                if origin_dict['code']=='200':
+                    tsc.reset(origin_id)
+                elif origin_dict['code']=='401':
+                    if tsc.add(origin_id, parse_timestring(origin_dict['time_stamp']),res):
+                        blocked_file.write(line)
         else:
             print('Malformed line -->', line)
     
@@ -223,9 +232,8 @@ with open(commandline_args[1], 'r', **kwargs) as f:
     with open(commandline_args[3], 'w') as hour_file:
         #hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(chain([min(hist.temporal_stats)], hist.temporal_stats), hist.temporal_stats)], key=lambda x:x[0])]))
         hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in heapq.nlargest(10, sc, key=lambda x:x[1])]))
-    with open(commandline_args[5], 'w') as blocked_file:
-        pass
 
+blocked_file.close()
 
 # EXTRA FEATURES
 # which origin gave the most error messages table sorted by error code
