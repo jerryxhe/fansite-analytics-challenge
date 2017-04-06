@@ -39,42 +39,6 @@ def parse_timestring(ts):
 from sortedcontainers import *
 from itertools import repeat
 from collections import Counter
-class FastCounter: # separate storage for low frequency keys
-    def __init__(self, number_of_low_freq_hash=0, top_n=10):
-        self.number_of_low_freq_hash=number_of_low_freq_hash
-        self.seen_k_th = SortedList() # [set() for _ in xrange(number_of_low_freq_hash)]
-        self.main_origin_table = {}
-        self.top_n = top_n
-    
-    def __iter__(self): # 
-        top10 = [] # accessible from this scope
-        top_n = self.top_n
-        if is_python3:
-            top10 = list(heapq.nlargest(top_n, self.main_origin_table.items(), key=lambda x: x[1]))
-        else:
-            top10 = list(heapq.nlargest(top_n, self.main_origin_table.iteritems(), key=lambda x: x[1]))
-        
-        for tup in top10:
-            yield tup
-        
-        c = Counter(self.seen_k_th)
-        for it,_ in top10:
-            del c[it]
-        for tup in c.most_common(top_n):  # python 3 can do yield from c.most_common(top_n)
-            yield tup
-        
-    def incr(self,it, step_=1):
-        if it in self.main_origin_table:
-            self.main_origin_table[it]+=step_
-            return
-        k = server_stats.number_of_low_freq_hash
-        count_=self.seen_k_th.count(it)+step_
-        if count_>k:
-            self.main_origin_table[it]=count_
-            # the value is left in the low frequency storage, sacrifising memory for speed
-            # the idea is that the items in the seen_k_th table will likely not make it to the top 10 list
-        else:
-            self.seen_k_th.extend(repeat(it,step_))
         
 class server_stats:
     number_of_low_freq_hash = 5 # a reasonable value for this parameter
@@ -93,9 +57,6 @@ class server_stats:
             self.temporal_stats[dt]=1
         #self.temporal_stats
     
-    #def add_resource_consumption(self, it, int_val):
-    #    self.res_consumption.incr(it,int_val)
-    
     def top10_res(self):
         if is_python3:
             return heapq.nlargest(10, self.res_consumption.items(), 
@@ -106,8 +67,6 @@ class server_stats:
     def add_resource_consumption(self, it, int_val):
         self.res_consumption[it]+=int_val
     
-    #def top10_res(self):
-    #    return islice(self.res_consumption, 10)
     
     def incr(self,it):
         if it in self.main_origin_table:
