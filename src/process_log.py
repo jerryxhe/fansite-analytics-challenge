@@ -178,7 +178,7 @@ with open(commandline_args[1], 'r', **kwargs) as f:
             origin_id = origin_dict['ipaddr']
             hist.incr(origin_id)
             if origin_dict['bytes']:
-                hist.add_resource_consumption(origin_dict['res'], int(origin_dict['bytes']))
+                hist.add_resource_consumption(origin_dict['res'].split(" ")[0], int(origin_dict['bytes']))
             hist.add_time_info_from_string(origin_dict['time_stamp'])
             res = origin_dict['res']
             if res.startswith('/login'):
