@@ -66,7 +66,6 @@ class server_stats:
     def add_resource_consumption(self, it, int_val):
         self.res_consumption[it]+=int_val
     
-    
     def incr(self,it):
         if it in self.main_origin_table:
             self.main_origin_table[it]+=1
@@ -158,7 +157,7 @@ time2str = lambda dt: datetime.strftime(dt,"%d/%b/%Y:%H:%M:%S %z")
 
 import re
 #ip_regex_whost_check = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
-ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s"[A-Z]+?\W(?P<res>.*)\s?.*?\"\s?(?P<code>\d{3})\s?(?P<bytes>\d+)?.*?$')
+ip_regex = re.compile(r'^(?P<ipaddr>.*?)\s-\s-\s\[(?P<time_stamp>.*?)\]\s"([A-Z]+?\W)?(?P<res>.*)\s?.*?\"\s?(?P<code>\d{3})\s?(?P<bytes>\d+)?.*?$')
 
 from itertools import islice
 hist = server_stats()
