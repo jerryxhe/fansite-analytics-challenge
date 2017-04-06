@@ -1,5 +1,4 @@
 #/usr/bin/env python3
-
 from itertools import islice
 import re
 # have separate sets for origins with small frequency
