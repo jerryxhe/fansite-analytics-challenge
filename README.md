@@ -1,6 +1,7 @@
 # Implementation
 
 This script requires the sortedcontainers==1.5.7 python package, please install by running install.sh or just use pip or pip3. 
+The original design is to use Python3, but later I made it Python2 compatible as well for it to be able to port to more potential environments
 
 ### Feature 1 
 List in descending order the top 10 most active hosts/IP addresses that have accessed the site.
