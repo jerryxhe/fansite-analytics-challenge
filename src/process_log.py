@@ -1,4 +1,5 @@
 #/usr/bin/env python3
+
 # This script is both python2 and python3 compatible
 from itertools import islice
 import re
@@ -22,7 +23,7 @@ if is_python3:
     globals()['xrange'] = range
     globals()['izip']=zip
 
-from py2_utils import FixedOffSet
+from py2_compat_utils import FixedOffSet
 def parse_timestring(ts):
     if is_python3:
         return datetime.strptime(ts, "%d/%b/%Y:%H:%M:%S %z")
@@ -110,6 +111,7 @@ def compute_1hr_count(ordered_dict, start_time):
     for k in ordered_dict.irange(start_time, start_time+timedelta(hours=1)):
         freq+=ordered_dict[k]
     return freq
+    
 
 def sum_consecutive(x):
     if len(x)==1:
@@ -156,6 +158,7 @@ class WindowCountIterator:
                 self.old_sum+=ordered_dict[self.start_time + self.time_frame]
             self.start_time += timedelta(seconds=1)
 
+
 from itertools import chain,starmap
 import operator
 from functools import partial 
@@ -190,7 +193,6 @@ class SlidingWindowCount:
                 wc = WindowCountIterator(self.temporal_stats, self.timeline[i], self.timeline[i+1])
                 initial10 = heapq.nlargest(10, chain(wc,initial10), key=lambda x:x[1])
         return list(initial10)
-
 
 class ThreeStrikeCounter:
     def __init__(self, time_frame=timedelta(seconds=20)):
@@ -258,11 +260,12 @@ with open(commandline_args[1], 'r', **kwargs) as f:
         for origin,_ in hist.top10_res():
             res_file.write(origin)
             res_file.write("\n")
-    
+   
     sc = SlidingWindowCount(hist.temporal_stats)
     from itertools import chain
     with open(commandline_args[3], 'w') as hour_file:
         ans = sc.iterative_search()
+        #hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(chain([min(hist.temporal_stats)], hist.temporal_stats), hist.temporal_stats)], key=lambda x:x[0])]))
         hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in ans]))
         hour_file.write("\n")
 
