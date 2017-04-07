@@ -1,4 +1,6 @@
 #/usr/bin/env python3
+
+# This script is both python2 and python3 compatible
 from itertools import islice
 import re
 # have separate sets for origins with small frequency
@@ -7,11 +9,9 @@ import heapq
 import sys
 from sortedcontainers import SortedDict
 from datetime import datetime
-# This script is both python2 and python3 compatible
+
 import sys
-
 commandline_args =  sys.argv
-
 is_python3 = (sys.version_info > (3, 0))
 
 try:
@@ -46,7 +46,7 @@ class server_stats:
         #self.res_consumption = FastCounter()
         self.res_consumption = defaultdict(int)
         self.temporal_stats = SortedDict()
-    
+
     def add_time_info_from_string(self, st):
         dt = parse_timestring(st)
         if dt in self.temporal_stats:
@@ -111,22 +111,88 @@ def compute_1hr_count(ordered_dict, start_time):
     for k in ordered_dict.irange(start_time, start_time+timedelta(hours=1)):
         freq+=ordered_dict[k]
     return freq
+    
 
+def sum_consecutive(x):
+    if len(x)==1:
+        return x
+    else:
+        return [sum(x[i:i+2]) for i in range(len(x)-1)]
+
+def time_range(st, fin, incr=timedelta(seconds=1)):
+    if st <= fin:
+        while st < fin:
+            yield st
+            st += incr
+    else:
+        while st > fin:
+            yield st
+            st += incr
+
+def compute_count_in_range(temporal_stats, start_time, end_time):
+    ordered_dict = temporal_stats
+    if is_python3:
+        return (start_time, end_time, deque(itertools.accumulate(ordered_dict[k] for k in ordered_dict.irange(start_time, end_time)), maxlen=1)[0])
+    freq = 0;
+    for k in ordered_dict.irange(start_time, end_time):
+        freq+=ordered_dict[k]
+    return (start_time, end_time, freq)
+
+class WindowCountIterator:
+    def __init__(self, temporal_stats, start_time, end_time,time_frame=timedelta(hours=1)):
+        self.start_time = start_time
+        self.end_time = end_time
+        self.temporal_stats = defaultdict(int,temporal_stats)
+        _,_,self.old_sum = compute_count_in_range(temporal_stats, start_time, end_time)
+        self.time_frame=time_frame
+    def reset(self, start_time, end_time):
+        self.start_time = start_time
+        self.end_time = end_time
+        return self
+    def __iter__(self):
+        ordered_dict=self.temporal_stats
+        while self.start_time < self.end_time:
+            yield (self.start_time, self.old_sum)
+            self.old_sum=self.old_sum-ordered_dict[self.start_time]
+            if self.end_time > self.start_time + self.time_frame:
+                self.old_sum+=ordered_dict[self.start_time + self.time_frame]
+            self.start_time += timedelta(seconds=1)
+
+
+from itertools import chain,starmap
+import operator
+from functools import partial 
 class SlidingWindowCount:
     def __init__(self, temporal_stats, time_frame = timedelta(hours=1)):
         self.temporal_stats = temporal_stats
-        self.old_sum = compute_1hr_count(hist.temporal_stats, min(hist.temporal_stats))
-        self.time_frame = time_frame
-        self.start_time = min(hist.temporal_stats)
-        
-    def __iter__(self):
-        ordered_dict = self.temporal_stats
-        while self.start_time < max(ordered_dict):
-            yield (self.start_time, self.old_sum)
-            self.old_sum=sum([self.old_sum]+list(-ordered_dict[k] for k in ordered_dict.irange(self.start_time,self.start_time))
-        + list(ordered_dict[k] for k in ordered_dict.irange(self.start_time+self.time_frame,self.start_time+self.time_frame)))
-            self.start_time += timedelta(seconds=1)
+        max_time = max(hist.temporal_stats)
+        min_time = max(hist.temporal_stats)
+        timeline = time_range(min_time,max_time, time_frame)
+        self.timeline = list(chain(timeline, [max_time])) 
+        if len(self.timeline)==1:
+            timeline = [min(temporal_stats)]
+        print(timeline, self.timeline)
+        self.compute_count_in_range = partial(compute_count_in_range, self.temporal_stats)
+        self.windows_orig = list(starmap(self.compute_count_in_range, izip(timeline, self.timeline)))
+        print(self.windows_orig)
+        #self.old_sum = compute_1hr_count(hist.temporal_stats, min(hist.temporal_stats))
+        #self.time_frame = time_frame
+        #self.start_time = min(hist.temporal_stats)
 
+    def iterative_search(self):
+        wc = []
+        initial10 = [(datetime.now(), 0)]
+        if len(self.timeline)==1:
+            wc = WindowCountIterator(self.temporal_stats, min(self.temporal_stats), max(self.temporal_stats))
+            initial10 = heapq.nlargest(10, chain(wc,initial10), key=lambda x:x[1])
+        else:
+            consecutive_sums = list(enumerate(sum_consecutive([v for (_, _, v) in self.windows_orig])))
+            for i, count_ in sorted(consecutive_sums, key=lambda x: x[1]):
+                if count_ < initial10[-1][1]:
+                    break
+                wc = WindowCountIterator(self.temporal_stats, self.timeline[i], self.timeline[i+1])
+                initial10 = heapq.nlargest(10, chain(wc,initial10), key=lambda x:x[1])
+        return list(initial10)
 
 class ThreeStrikeCounter:
     def __init__(self, time_frame=timedelta(seconds=20)):
@@ -189,17 +255,19 @@ with open(commandline_args[1], 'r', **kwargs) as f:
     
     with open(commandline_args[2], 'w') as hosts_file:
         hosts_file.write(str(hist))
-    
+
     with open(commandline_args[4], 'w') as res_file:
         for origin,_ in hist.top10_res():
             res_file.write(origin)
             res_file.write("\n")
-            
+   
     sc = SlidingWindowCount(hist.temporal_stats)
     from itertools import chain
     with open(commandline_args[3], 'w') as hour_file:
+        ans = sc.iterative_search()
         #hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(chain([min(hist.temporal_stats)], hist.temporal_stats), hist.temporal_stats)], key=lambda x:x[0])]))
-        hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in heapq.nlargest(10, sc, key=lambda x:x[1])]))
+        hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in ans]))
+        hour_file.write("\n")
 
 blocked_file.close()
 
