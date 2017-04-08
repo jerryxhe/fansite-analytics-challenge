@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from datetime import timedelta,datetime
-from collections import deque,Counter
+from collections import deque,Counter,defaultdict
 import itertools
 import sys
 is_python3 = (sys.version_info > (3, 0))
@@ -125,3 +125,98 @@ class SlidingWindowCount:
                 wc.reset(self.timeline[i], self.timeline[i+1])
                 initial10 = heapq.nlargest(10, chain(wc,initial10), key=lambda x:x[1])
         return list(initial10)
+
+from bisect import bisect_left, bisect_right
+class SortedTop10:
+    def __init__(self, key=lambda x: -x[0]):
+        self._key=key
+        self._keys = [0]
+        self._values = [(0,datetime.now(), datetime.now())]
+       
+    def trim(self):
+        self._keys=self._keys[:10]
+        self._values = self._values[:10]
+    
+        
+    def insert(self, tup):
+        k = self._key(tup)
+        i = bisect_left(self._keys, k)
+        self._keys.insert(i, k)
+        self._values.insert(i, tup)
+        if i>10:
+            self.trim()
+        
+        
+    def __iter__(self):
+        for v in self._values[:10]:
+            yield v
+
+from array import array
+class TimeIndexCumSum:
+    def __init__(self):
+        self.timeline = [None]*100000
+        self.cumsum = array('L', [0])
+        self.count = 0
+        self.i=-1
+        self.top10 = SortedTop10()
+        self.j=0;   # start of the 1 hour window
+        self.mint = None
+    
+    def add(self, t):
+        i = self.i
+        if i+3 > len(self.timeline):
+            self.timeline += [None]*10000
+        if t!=self.timeline[i]:
+            self.i+=1
+            self.timeline[self.i]=t 
+            self.cumsum.append(self.cumsum[i+1]+1)
+            while self.j < self.i and (t - self.timeline[self.j]) > timedelta(hours=1):
+                self.j+=1
+                if self.j < self.i and ((t - self.timeline[self.j]) < timedelta(hours=1)):
+                    self.top10.insert((self.cumsum[self.i+1]-self.cumsum[self.j-1], self.timeline[self.j-2], self.timeline[self.i]))
+                    break
+        else:
+            self.cumsum[i+1]+=1
+        if self.mint is None:
+            self.mint = t
+        self.maxt = t
+        
+    def pad_end(self):
+        if (self.maxt - self.mint) < timedelta(hours=1):
+            final_count=self.cumsum[self.i+1]
+            firstpass = False
+            for t in time_range(self.maxt+timedelta(seconds=1), self.maxt+timedelta(hours=1)):
+                while self.j < self.i and (t - self.timeline[self.j]) > timedelta(hours=1):
+                    self.j+=1
+                    firstpass = True
+                if self.j <= self.i and firstpass:
+                    self.top10.insert((final_count-self.cumsum[self.j-1], self.timeline[self.j-1], t))
+
+            
+    def __str__(self):
+        return repr(self.top10._values)
+        
+class ThreeStrikeCounter: 
+    """for blocked.txt"""
+    def __init__(self, time_frame=timedelta(seconds=20)):
+        self.storage = defaultdict(lambda: deque(maxlen=3))  # ring buffer data structure
+        self.time_frame=time_frame
+        self.banned_starts = []
+
+    def add(self, ipaddr, new_time, end_point):
+        for (id_, t) in reversed(self.banned_starts):
+            if id_==ipaddr:
+                if (t+timedelta(minutes=5))>new_time:
+                    return True
+            if t < (new_time -timedelta(minutes=5)):
+                break
+        if end_point.startswith('/login'):
+            err401_times = self.storage[ipaddr]
+            err401_times.append(new_time)
+            min_start_time = new_time-self.time_frame
+            if (err401_times[0] > min_start_time) and len(err401_times)==3:
+                self.banned_starts.append((ipaddr, new_time))
+            return False
+    
+    def reset(self, ipaddr):
+        self.storage[ipaddr].clear()
