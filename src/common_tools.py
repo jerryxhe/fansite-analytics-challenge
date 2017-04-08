@@ -145,7 +145,6 @@ class SortedTop10:
         if i>10:
             self.trim()
         
-        
     def __iter__(self):
         for v in self._values[:10]:
             yield v
