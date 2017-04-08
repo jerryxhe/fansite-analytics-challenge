@@ -29,7 +29,6 @@ class LogParser:
             else:
                 print('Malformed line -->', line)
 
-
 from py2_compat_utils import FixedOffSet
 
 def parse_timestring(ts):
