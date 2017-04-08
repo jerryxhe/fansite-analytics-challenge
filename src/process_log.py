@@ -1,9 +1,7 @@
 #/usr/bin/env python3
-
 # This script is both python2 and python3 compatible
 from itertools import islice
 import re
-# have separate sets for origins with small frequency
 from collections import defaultdict
 import heapq
 import sys
@@ -119,8 +117,6 @@ class ThreeStrikeCounter:
         self.storage[ipaddr].clear()
 
 time2str = lambda dt: datetime.strftime(dt,"%d/%b/%Y:%H:%M:%S %z")
-
-#ip_regex_whost_check = re.compile(r'^((?P<ipaddr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?P<domain_name>([a-z0-9\-\_]+\.)+[a-z0-9]+)|(?P<local_host_name>[a-z0-9\-\_]+))\s-\s-\s\[(?P<time_stamp>.*?)\].*?\s(?P<bytes>\d+)?$')
 from itertools import islice
 hist = server_stats()
 
@@ -150,35 +146,33 @@ with open(commandline_args[1], 'r', **kwargs) as f:
         if int(origin_dict['code'])/100==4: # an error has occurred
             err_table[origin_id]+=1
     
-    with open(commandline_args[2], 'w') as hosts_file:
-        hosts_file.write(str(hist))
+with open(commandline_args[2], 'w') as hosts_file:
+    hosts_file.write(str(hist))
 
-    with open(commandline_args[4], 'w') as res_file:
-        for origin,_ in hist.top10_res():
-            res_file.write(origin)
-            res_file.write("\n")
+with open(commandline_args[4], 'w') as res_file:
+    for origin,_ in hist.top10_res():
+        res_file.write(origin)
+        res_file.write("\n")
    
-    sc = SlidingWindowCount(hist.temporal_stats)
-    from itertools import chain
-    with open(commandline_args[3], 'w') as hour_file:
-        ans = sc.iterative_search()
-        #hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for v, ti in heapq.nlargest(10, [(sc.rollover_one(t1,t2),t1) for (t1, t2) in izip(chain([min(hist.temporal_stats)], hist.temporal_stats), hist.temporal_stats)], key=lambda x:x[0])]))
-        hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in ans]))
-        hour_file.write("\n")
-        
-    with open(commandline_args[5], 'w') as err_agents_file:
-        top10 = []
-        if is_python3:
-            top10 = heapq.nlargest(10, err_table.items(), 
-                                   key=lambda x: x[-1])
-        else:
-            top10 = heapq.nlargest(10, err_table.iteritems(), 
-                                   key=lambda x: x[-1])
-        for (origin_id, count_) in top10:
-            err_agents_file.write(",".join([origin_id,str(count_)]))
-            err_agents_file.write("\n")
-
-blocked_file.close()
+sc = SlidingWindowCount(hist.temporal_stats)
+from itertools import chain
+with open(commandline_args[3], 'w') as hour_file:
+    ans = sc.iterative_search()
+    hour_file.write("\n".join(["".join([time2str(ti),",",str(v)]) for ti,v in ans]))
+    hour_file.write("\n")
 
 # EXTRA FEATURES
-# which origin gave the most error messages table sorted by error code
+# which origin gave the most error messages table sorted by error code        
+with open(commandline_args[5], 'w') as err_agents_file:
+    top10 = []
+    if is_python3:
+        top10 = heapq.nlargest(10, err_table.items(), 
+                               key=lambda x: x[-1])
+    else:
+        top10 = heapq.nlargest(10, err_table.iteritems(), 
+                               key=lambda x: x[-1])
+    for (origin_id, count_) in top10:
+        err_agents_file.write(",".join([origin_id,str(count_)]))
+        err_agents_file.write("\n")
+
+blocked_file.close()
