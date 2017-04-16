@@ -43,7 +43,6 @@ class server_stats:
             self.temporal_stats[dt]+=1
         else:
             self.temporal_stats[dt]=1
-        #self.temporal_stats
     
     def top10_res(self):
         if is_python3:
@@ -68,7 +67,7 @@ class server_stats:
                 self.seen_k_th[i-1].remove(it)
                 self.seen_k_th[i].add(it)
                 return
-        self.seen_k_th[0].add(it) # `seen once` goes to 0 index
+        self.seen_k_th[0].add(it) # `seen once` goes to 0 index, `seen twice` goes to 1 index and so on
 
     def __str__(self):
         from itertools import chain,islice
